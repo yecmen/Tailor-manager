@@ -1321,9 +1321,9 @@ function FinanzasView({ setView }) {
             </div>
             {filtroCorte !== 'TODOS' && (
               <button onClick={() => {
-                const p = prompt("🔑 Introduce la contraseña maestra para ver el Balance (Prueba: admin):");
-                if(p === "admin") setModalResumen(filtroCorte);
-                else if(p !== null) alert("Contraseña incorrecta");
+                const p = prompt("🔑 Introduce la contraseña maestra para ver el Balance:");
+                if (p === localStorage.getItem("master_pin")) setModalResumen(filtroCorte);
+                else if (p !== null) alert("Contraseña incorrecta");
               }} className="bg-gray-800 hover:bg-gray-900 text-white font-bold px-6 py-4 rounded-xl text-xl shadow-lg flex items-center gap-2">
                 🔒 Ver Balance de Corte
               </button>
