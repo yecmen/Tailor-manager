@@ -1379,4 +1379,16 @@ function FinanzasView({ setView }) {
   );
 }
 
-export default App;
+
+function AuthWrapper() {
+  const [isAuthenticated, setIsAuthenticated] = useState(!!localStorage.getItem("master_pin"));
+
+  if (!isAuthenticated) {
+    return <LoginScreen onLogin={() => setIsAuthenticated(true)} />;
+  }
+
+  return <App />;
+}
+
+export default AuthWrapper;
+
