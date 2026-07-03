@@ -1,5 +1,68 @@
 import { useState, useEffect, useRef } from 'react';
 
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
+
+const apiFetch = async (endpoint, options = {}) => {
+  const pin = localStorage.getItem("master_pin");
+  const headers = {
+    ...options.headers,
+    "X-Access-Pin": pin || ""
+  };
+  const url = `${API_URL}${endpoint}`;
+  const response = await fetch(url, { ...options, headers });
+  if (response.status === 401) {
+    localStorage.removeItem("master_pin");
+    window.location.reload();
+    return new Promise(() => {});
+  }
+  return response;
+};
+
+function LoginScreen({ onLogin }) {
+  const [pin, setPin] = useState("");
+  const [error, setError] = useState("");
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      const res = await fetch(`${API_URL}/`, {
+        headers: { "X-Access-Pin": pin }
+      });
+      if (res.status === 200) {
+        localStorage.setItem("master_pin", pin);
+        onLogin();
+      } else {
+        setError("PIN Incorrecto");
+      }
+    } catch (err) {
+      setError("Error de conexión con el servidor");
+    }
+  };
+
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="bg-white p-8 rounded-2xl shadow-xl max-w-sm w-full">
+        <h2 className="text-3xl font-bold text-center mb-6 text-gray-800">Acceso Privado</h2>
+        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+          <input 
+            type="password" 
+            placeholder="Ingrese el PIN maestro" 
+            value={pin}
+            onChange={(e) => setPin(e.target.value)}
+            className="border p-4 rounded-xl text-center text-2xl tracking-widest"
+            autoFocus
+          />
+          {error && <p className="text-red-500 text-center font-bold">{error}</p>}
+          <button type="submit" className="bg-blue-600 text-white p-4 rounded-xl font-bold text-xl hover:bg-blue-700">
+            Ingresar
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+
 function CustomSelect({ value, onChange, options, placeholder = "Seleccione", className = "" }) {
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef(null);
@@ -88,7 +151,7 @@ function ResumenFinancieroModal({ corteId, nombreCorte, onClose }) {
   const [mostrarDetalles, setMostrarDetalles] = useState(false);
 
   useEffect(() => {
-    fetch(`http://localhost:8000/cortes/${corteId}/resumen_financiero`)
+    apiFetch(`/cortes/${corteId}/resumen_financiero`)
       .then(r => r.json())
       .then(data => { setResumen(data); setLoading(false); });
   }, [corteId]);
@@ -196,7 +259,7 @@ function HistorialActividadView({ setView }) {
   const [filtroFecha, setFiltroFecha] = useState('');
 
   useEffect(() => {
-    fetch("http://localhost:8000/historial").then(r => r.json()).then(data => setHistorial(data));
+    apiFetch("/historial").then(r => r.json()).then(data => setHistorial(data));
   }, []);
 
   const historialFiltrado = historial.filter(h => {
@@ -305,8 +368,8 @@ function DistribuidorForm({ setView }) {
   const [catalogoTelas, setCatalogoTelas] = useState([]);
 
   useEffect(() => {
-    fetch("http://localhost:8000/catalogo_prendas").then(r => r.json()).then(data => setCatalogoPrendas(data)).catch(() => setCatalogoPrendas([]));
-    fetch("http://localhost:8000/catalogo_insumos").then(r => r.json()).then(data => setCatalogoTelas(data)).catch(() => setCatalogoTelas([]));
+    apiFetch("/catalogo_prendas").then(r => r.json()).then(data => setCatalogoPrendas(data)).catch(() => setCatalogoPrendas([]));
+    apiFetch("/catalogo_insumos").then(r => r.json()).then(data => setCatalogoTelas(data)).catch(() => setCatalogoTelas([]));
   }, []);
 
   const opcionesTallas = tipoTalla === 'alfabetico' 
@@ -323,7 +386,7 @@ function DistribuidorForm({ setView }) {
   };
 
   const addPrendaCat = async (nombre) => {
-    const res = await fetch("http://localhost:8000/catalogo_prendas/nuevo", {
+    const res = await apiFetch("/catalogo_prendas/nuevo", {
       method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ nombre })
     });
     if(res.ok) {
@@ -333,7 +396,7 @@ function DistribuidorForm({ setView }) {
   };
 
   const editPrendaCat = async (id, nombre) => {
-    const res = await fetch(`http://localhost:8000/catalogo_prendas/${id}`, {
+    const res = await apiFetch(`/catalogo_prendas/${id}`, {
       method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ nombre })
     });
     if(res.ok) {
@@ -344,7 +407,7 @@ function DistribuidorForm({ setView }) {
   };
 
   const addTelaCat = async (nombre) => {
-    const res = await fetch("http://localhost:8000/catalogo_insumos/nuevo", {
+    const res = await apiFetch("/catalogo_insumos/nuevo", {
       method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ nombre })
     });
     if(res.ok) {
@@ -354,7 +417,7 @@ function DistribuidorForm({ setView }) {
   };
 
   const editTelaCat = async (id, nombre) => {
-    const res = await fetch(`http://localhost:8000/catalogo_insumos/${id}`, {
+    const res = await apiFetch(`/catalogo_insumos/${id}`, {
       method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ nombre })
     });
     if(res.ok) {
@@ -385,7 +448,7 @@ function DistribuidorForm({ setView }) {
 
     setGuardando(true);
     try {
-      const response = await fetch("http://localhost:8000/cortes/nuevo", {
+      const response = await apiFetch("/cortes/nuevo", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ nombre, quien_entrego: quienEntrego, fecha_recibido: fechaRecibido, fecha_entrega: fechaEntrega, prendas: prendasValidas })
       });
@@ -491,8 +554,8 @@ function ComprarInsumosForm({ setView }) {
   const [nuevoCat, setNuevoCat] = useState('');
 
   useEffect(() => {
-    fetch("http://localhost:8000/cortes/activos").then(r => r.json()).then(data => setCortes(data));
-    fetch("http://localhost:8000/catalogo_insumos").then(r => r.json()).then(data => setCatalogo(data));
+    apiFetch("/cortes/activos").then(r => r.json()).then(data => setCortes(data));
+    apiFetch("/catalogo_insumos").then(r => r.json()).then(data => setCatalogo(data));
   }, []);
 
   const agregarInsumo = () => setInsumos([...insumos, { nombre: '', cantidad: '' }]);
@@ -504,7 +567,7 @@ function ComprarInsumosForm({ setView }) {
 
   const addCatalogo = async (nombre) => {
     if(!nombre) return;
-    const r = await fetch("http://localhost:8000/catalogo_insumos/nuevo", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ nombre }) });
+    const r = await apiFetch("/catalogo_insumos/nuevo", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ nombre }) });
     if(r.ok) {
       const nw = await r.json();
       setCatalogo([...catalogo, nw]);
@@ -514,7 +577,7 @@ function ComprarInsumosForm({ setView }) {
   };
 
   const editCatalogo = async (id, nombre) => {
-    const r = await fetch(`http://localhost:8000/catalogo_insumos/${id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ nombre }) });
+    const r = await apiFetch(`/catalogo_insumos/${id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ nombre }) });
     if(r.ok) {
       setCatalogo(catalogo.map(c => c.id.toString() === id.toString() ? {...c, nombre} : c));
       alert("✏️ Actualizado exitosamente");
@@ -531,7 +594,7 @@ function ComprarInsumosForm({ setView }) {
     if(insumosValidos.length === 0) { alert("Añade al menos un material con cantidad válida."); return; }
 
     setGuardando(true);
-    const r = await fetch("http://localhost:8000/insumos/comprar", {
+    const r = await apiFetch("/insumos/comprar", {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ corte_id: parseInt(corteId), fecha_compra: fechaCompra, insumos: insumosValidos })
     });
@@ -628,10 +691,10 @@ function RepartirTrabajoForm({ setView }) {
   };
 
   useEffect(() => {
-    fetch("http://localhost:8000/dashboard").then(r => r.json()).then(data => setCortes(data));
-    fetch("http://localhost:8000/trabajadores/").then(r => r.json()).then(data => setTrabajadores(data));
-    fetch("http://localhost:8000/catalogo_insumos").then(r => r.json()).then(data => setCatalogo(data));
-    fetch("http://localhost:8000/catalogo_prendas").then(r => r.json()).then(data => setCatalogoPrendas(data)).catch(() => setCatalogoPrendas([]));
+    apiFetch("/dashboard").then(r => r.json()).then(data => setCortes(data));
+    apiFetch("/trabajadores/").then(r => r.json()).then(data => setTrabajadores(data));
+    apiFetch("/catalogo_insumos").then(r => r.json()).then(data => setCatalogo(data));
+    apiFetch("/catalogo_prendas").then(r => r.json()).then(data => setCatalogoPrendas(data)).catch(() => setCatalogoPrendas([]));
   }, []);
 
   const agregarInsumo = () => setInsumosEntregados([...insumosEntregados, { nombre: '', cantidad: '' }]);
@@ -643,7 +706,7 @@ function RepartirTrabajoForm({ setView }) {
 
   const addCatalogo = async (nombre) => {
     if(!nombre) return;
-    const r = await fetch("http://localhost:8000/catalogo_insumos/nuevo", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ nombre }) });
+    const r = await apiFetch("/catalogo_insumos/nuevo", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ nombre }) });
     if(r.ok) {
       const nw = await r.json();
       setCatalogo([...catalogo, nw]);
@@ -652,7 +715,7 @@ function RepartirTrabajoForm({ setView }) {
     }
   };
   const editCatalogo = async (id, nombre) => {
-    const r = await fetch(`http://localhost:8000/catalogo_insumos/${id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ nombre }) });
+    const r = await apiFetch(`/catalogo_insumos/${id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ nombre }) });
     if(r.ok) {
       setCatalogo(catalogo.map(c => c.id.toString() === id.toString() ? {...c, nombre} : c));
       alert("✏️ Insumo actualizado");
@@ -661,7 +724,7 @@ function RepartirTrabajoForm({ setView }) {
 
   const addPrendaCat = async (nombre) => {
     if(!nombre) return;
-    const r = await fetch("http://localhost:8000/catalogo_prendas/nuevo", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ nombre }) });
+    const r = await apiFetch("/catalogo_prendas/nuevo", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ nombre }) });
     if(r.ok) {
       const nw = await r.json();
       setCatalogoPrendas([...catalogoPrendas, nw]);
@@ -672,7 +735,7 @@ function RepartirTrabajoForm({ setView }) {
   };
 
   const editPrendaCat = async (id, nombre) => {
-    const r = await fetch(`http://localhost:8000/catalogo_prendas/${id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ nombre }) });
+    const r = await apiFetch(`/catalogo_prendas/${id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ nombre }) });
     if(r.ok) {
       setCatalogoPrendas(catalogoPrendas.map(c => c.id.toString() === id.toString() ? {...c, nombre} : c));
       alert("✏️ Prenda actualizada");
@@ -681,7 +744,7 @@ function RepartirTrabajoForm({ setView }) {
 
   const addTrabajador = async (nombre) => {
     if(!nombre) return;
-    const r = await fetch("http://localhost:8000/trabajadores/nuevo", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ nombre }) });
+    const r = await apiFetch("/trabajadores/nuevo", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ nombre }) });
     if(r.ok) {
       const nw = await r.json();
       setTrabajadores([...trabajadores, nw]);
@@ -690,7 +753,7 @@ function RepartirTrabajoForm({ setView }) {
     }
   };
   const editTrabajador = async (id, nombre) => {
-    const r = await fetch(`http://localhost:8000/trabajadores/${id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ nombre }) });
+    const r = await apiFetch(`/trabajadores/${id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ nombre }) });
     if(r.ok) {
       setTrabajadores(trabajadores.map(c => c.id.toString() === id.toString() ? {...c, nombre} : c));
       alert("✏️ Costurero actualizado");
@@ -721,7 +784,7 @@ function RepartirTrabajoForm({ setView }) {
     }).filter(i => i.nombre !== '');
 
     setGuardando(true);
-    const r = await fetch("http://localhost:8000/asignaciones/nueva", {
+    const r = await apiFetch("/asignaciones/nueva", {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ 
         corte_id: parseInt(corteId), 
@@ -876,13 +939,13 @@ function DashboardView({ setView }) {
   const [expandedAsignaciones, setExpandedAsignaciones] = useState(null);
   const [expandedTelas, setExpandedTelas] = useState(null);
 
-  const cargarCortes = () => fetch("http://localhost:8000/dashboard").then(r => r.json()).then(data => setCortes(data));
+  const cargarCortes = () => apiFetch("/dashboard").then(r => r.json()).then(data => setCortes(data));
   useEffect(() => { cargarCortes(); }, []);
 
   const editarTela = (telaId, color, currentMetros) => {
     const nuevosMetros = window.prompt(`Editar cantidad de metros para la tela ${color}:`, currentMetros);
     if (nuevosMetros && parseFloat(nuevosMetros) !== currentMetros) {
-      fetch(`http://localhost:8000/telas/${telaId}`, {
+      apiFetch(`/telas/${telaId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ cantidad_metros: parseFloat(nuevosMetros) })
@@ -891,7 +954,7 @@ function DashboardView({ setView }) {
   };
 
   const cambiarEstadoCorte = async (corteId, nuevoEstado) => {
-    await fetch(`http://localhost:8000/cortes/${corteId}/estado`, {
+    await apiFetch(`/cortes/${corteId}/estado`, {
       method: "PUT", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ estado: nuevoEstado })
     });
@@ -901,7 +964,7 @@ function DashboardView({ setView }) {
   const devolverPrendas = async (asignacionId, maxCantidad) => {
     const cant = window.prompt(`¿Cuántas prendas devolvió el costurero? (Máximo ${maxCantidad})`);
     if (cant && parseInt(cant) > 0 && parseInt(cant) <= maxCantidad) {
-      await fetch(`http://localhost:8000/asignaciones/${asignacionId}/devolver`, {
+      await apiFetch(`/asignaciones/${asignacionId}/devolver`, {
         method: "PUT", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ cantidad: parseInt(cant) })
       });
@@ -1061,9 +1124,9 @@ function FinanzasView({ setView }) {
   };
 
   const cargarDatos = () => {
-    fetch("http://localhost:8000/trabajadores/").then(r => r.json()).then(data => setTrabajadores(data));
-    fetch("http://localhost:8000/cortes/activos").then(r => r.json()).then(data => setCortes(data));
-    fetch("http://localhost:8000/finanzas").then(r => r.json()).then(data => setFinanzas(data));
+    apiFetch("/trabajadores/").then(r => r.json()).then(data => setTrabajadores(data));
+    apiFetch("/cortes/activos").then(r => r.json()).then(data => setCortes(data));
+    apiFetch("/finanzas").then(r => r.json()).then(data => setFinanzas(data));
   };
 
   useEffect(() => { cargarDatos(); }, []);
@@ -1078,21 +1141,21 @@ function FinanzasView({ setView }) {
       fecha: new Date().toISOString().split('T')[0],
       corte_id: filtroCorteCosturero !== 'TODOS' ? parseInt(filtroCorteCosturero) : null
     };
-    fetch("http://localhost:8000/pagos/trabajador", {
+    apiFetch("/pagos/trabajador", {
       method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(pago)
     }).then(r => r.json()).then(() => { setMontoPago(''); cargarDatos(); });
   };
 
   const anularPago = (pagoId) => {
     if (window.confirm("¿Seguro que deseas ANULAR este pago? El dinero volverá a la deuda del trabajador.")) {
-      fetch(`http://localhost:8000/pagos/${pagoId}`, { method: "DELETE" })
+      apiFetch(`/pagos/${pagoId}`, { method: "DELETE" })
         .then(r => r.json()).then(() => cargarDatos());
     }
   };
 
   const registrarIngreso = async () => {
     if(filtroCorte === 'TODOS' || !montoIngreso) return alert("Selecciona corte y monto");
-    const r = await fetch("http://localhost:8000/ingresos/corte", {
+    const r = await apiFetch("/ingresos/corte", {
       method: "POST", headers: {"Content-Type":"application/json"},
       body: JSON.stringify({ corte_id: parseInt(filtroCorte), monto: parseFloat(montoIngreso), fecha: new Date().toISOString().split('T')[0], descripcion: descIngreso || 'Adelanto/Pago' })
     });

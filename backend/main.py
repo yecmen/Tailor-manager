@@ -1,4 +1,5 @@
-from fastapi import FastAPI, Depends, HTTPException
+import os
+from fastapi import FastAPI, Depends, HTTPException, Header
 from sqlalchemy.orm import Session
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -8,13 +9,19 @@ import database
 
 database.Base.metadata.create_all(bind=database.engine)
 
-app = FastAPI(title="Tailor Manager API", version="1.0")
+MASTER_PIN = os.getenv("MASTER_PIN", "1234")
+
+def verify_pin(x_access_pin: str = Header(None)):
+    if x_access_pin != MASTER_PIN:
+        raise HTTPException(status_code=401, detail="Acceso denegado: PIN incorrecto")
+
+app = FastAPI(title="Tailor Manager API", version="1.0", dependencies=[Depends(verify_pin)])
 
 # Permitir CORS para que el frontend pueda conectarse sin problemas
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
