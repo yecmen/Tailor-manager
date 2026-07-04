@@ -1,5 +1,18 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from './supabase.js';
+
+// ── Hook: intercepta el botón atrás del celular ───────────────────────────────
+function useBackGuard(onBack) {
+  useEffect(() => {
+    window.history.pushState({ guardado: true }, '');
+    const handler = () => {
+      window.history.pushState({ guardado: true }, '');
+      onBack();
+    };
+    window.addEventListener('popstate', handler);
+    return () => window.removeEventListener('popstate', handler);
+  }, [onBack]);
+}
 
 // ── Helpers de Supabase ───────────────────────────────────────────────────────
 
@@ -167,12 +180,16 @@ function CambiarPasswordModal({ usuario, onClose }) {
 
 // ── Gestión de Usuarios (solo admin) ─────────────────────────────────────────
 
-function GestionUsuariosView({ setView }) {
+function GestionUsuariosView({ setView, usuario }) {
   const [usuarios, setUsuarios] = useState([]);
   const [nuevoUser, setNuevoUser] = useState('');
   const [nuevoPass, setNuevoPass] = useState('');
   const [nuevoRol, setNuevoRol] = useState('regular');
   const [editando, setEditando] = useState(null);
+  const [showCambiarPass, setShowCambiarPass] = useState(false);
+
+  const handleBack = useCallback(() => setView('menu'), [setView]);
+  useBackGuard(handleBack);
 
   const cargar = async () => {
     const { data } = await supabase.from('usuarios').select('id, username, role').order('id');
@@ -209,6 +226,21 @@ function GestionUsuariosView({ setView }) {
     <div className="w-full max-w-full px-4 mx-auto bg-white p-5 rounded-3xl shadow-2xl mb-20">
       <button className="mb-8 bg-gray-200 hover:bg-gray-300 text-black font-bold py-4 px-8 rounded-xl text-lg" onClick={() => setView('menu')}>⬅️ Volver al Menú</button>
       <h2 className="text-xl font-black mb-8 text-indigo-700">👥 Gestión de Usuarios</h2>
+
+      {/* Cambiar MI contraseña */}
+      <div className="bg-gray-100 p-4 rounded-2xl mb-8 flex items-center justify-between">
+        <div>
+          <p className="text-lg font-bold text-gray-800">Mi cuenta: <span className="text-indigo-600">{usuario?.username}</span></p>
+          <p className="text-gray-500 text-sm">Rol: {usuario?.role}</p>
+        </div>
+        <button
+          onClick={() => setShowCambiarPass(true)}
+          className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-5 py-3 rounded-xl text-lg"
+        >
+          🔑 Cambiar mi contraseña
+        </button>
+      </div>
+      {showCambiarPass && <CambiarPasswordModal usuario={usuario} onClose={() => setShowCambiarPass(false)} />}
 
       <div className="bg-indigo-50 p-4 rounded-2xl mb-8 space-y-4">
         <h3 className="text-lg font-bold text-indigo-900">➕ Crear Nuevo Usuario</h3>
@@ -313,7 +345,16 @@ function CustomSelect({ value, onChange, options, placeholder = "Seleccione", cl
 
 function App({ usuario, onLogout }) {
   const [currentView, setCurrentView] = useState('menu');
-  const [showCambiarPassword, setShowCambiarPassword] = useState(false);
+
+  // Guard: back button en menú principal = confirmar cierre de sesión
+  const handleBack = useCallback(() => {
+    if (currentView !== 'menu') {
+      setCurrentView('menu');
+    } else {
+      if (window.confirm('¿Deseas cerrar sesión?')) onLogout();
+    }
+  }, [currentView, onLogout]);
+  useBackGuard(handleBack);
 
   return (
     <div className="min-h-screen p-4 text-gray-900 bg-gray-50">
@@ -323,22 +364,13 @@ function App({ usuario, onLogout }) {
           <p className="mt-2 text-lg text-gray-600">Sistema de Administración</p>
         </div>
         {currentView === 'menu' && (
-          <div className="absolute right-0 flex gap-2">
-            <button
-              className="bg-gray-200 hover:bg-gray-300 rounded-2xl p-4 shadow-sm border-2 border-gray-300 transition-colors"
-              onClick={() => setCurrentView('historial_actividad')}
-              title="Historial de Actividades"
-            >
-              <span className="text-xl">📜</span>
-            </button>
-            <button
-              className="bg-gray-200 hover:bg-gray-300 rounded-2xl p-4 shadow-sm border-2 border-gray-300 transition-colors"
-              onClick={() => setShowCambiarPassword(true)}
-              title="Configuración"
-            >
-              <span className="text-xl">⚙️</span>
-            </button>
-          </div>
+          <button
+            className="absolute right-0 bg-gray-200 hover:bg-gray-300 rounded-2xl p-4 shadow-sm border-2 border-gray-300 transition-colors"
+            onClick={() => setCurrentView('historial_actividad')}
+            title="Historial de Actividades"
+          >
+            <span className="text-xl">📜</span>
+          </button>
         )}
       </header>
 
@@ -349,11 +381,7 @@ function App({ usuario, onLogout }) {
       {currentView === 'dashboard' && <DashboardView setView={setCurrentView} />}
       {currentView === 'pagos' && <FinanzasView setView={setCurrentView} usuario={usuario} />}
       {currentView === 'historial_actividad' && <HistorialActividadView setView={setCurrentView} />}
-      {currentView === 'gestion_usuarios' && <GestionUsuariosView setView={setCurrentView} />}
-
-      {showCambiarPassword && (
-        <CambiarPasswordModal usuario={usuario} onClose={() => setShowCambiarPassword(false)} />
-      )}
+      {currentView === 'gestion_usuarios' && <GestionUsuariosView setView={setCurrentView} usuario={usuario} />}
     </div>
   );
 }
@@ -607,6 +635,15 @@ function DistribuidorForm({ setView }) {
   const [catalogoPrendas, setCatalogoPrendas] = useState([]);
   const [catalogoTelas, setCatalogoTelas] = useState([]);
 
+  const handleBack = useCallback(() => {
+    if (nombre || quienEntrego || fechaEntrega) {
+      if (window.confirm('¿Tienes datos sin guardar. ¿Seguro que quieres salir?')) setView('menu');
+    } else {
+      setView('menu');
+    }
+  }, [nombre, quienEntrego, fechaEntrega, setView]);
+  useBackGuard(handleBack);
+
   useEffect(() => {
     supabase.from('catalogo_prendas').select('*').then(({ data }) => setCatalogoPrendas(data || []));
     supabase.from('catalogo_maestro').select('*').then(({ data }) => setCatalogoTelas(data || []));
@@ -791,6 +828,15 @@ function ComprarInsumosForm({ setView }) {
   const [guardando, setGuardando] = useState(false);
   const [nuevoCat, setNuevoCat] = useState('');
 
+  const handleBack = useCallback(() => {
+    if (corteId) {
+      if (window.confirm('¿Tienes datos sin guardar. ¿Seguro que quieres salir?')) setView('menu');
+    } else {
+      setView('menu');
+    }
+  }, [corteId, setView]);
+  useBackGuard(handleBack);
+
   useEffect(() => {
     supabase.from('cortes').select('*').then(({ data }) => setCortes(data || []));
     supabase.from('catalogo_maestro').select('*').then(({ data }) => setCatalogo(data || []));
@@ -912,6 +958,15 @@ function RepartirTrabajoForm({ setView }) {
   const [insumosEntregados, setInsumosEntregados] = useState([{ nombre: '', cantidad: '' }]);
   const [guardando, setGuardando] = useState(false);
   const [nuevoCat, setNuevoCat] = useState('');
+
+  const handleBack = useCallback(() => {
+    if (corteId || trabajadorId) {
+      if (window.confirm('¿Tienes datos sin guardar. ¿Seguro que quieres salir?')) setView('menu');
+    } else {
+      setView('menu');
+    }
+  }, [corteId, trabajadorId, setView]);
+  useBackGuard(handleBack);
 
   const agregarPrenda = () => setPrendasAsignadas([...prendasAsignadas, { tipoPrenda: '', telaColor: '', talla: '', cantidad: '', pagoPorPrenda: '' }]);
   const actualizarPrenda = (index, campo, valor) => {
