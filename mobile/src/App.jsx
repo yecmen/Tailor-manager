@@ -2,16 +2,23 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from './supabase.js';
 
 // ── Hook: intercepta el botón atrás del celular ───────────────────────────────
+// IMPORTANTE: solo debe usarse UNA VEZ, en el componente App raíz.
 function useBackGuard(onBack) {
+  const onBackRef = useRef(onBack);
+  useEffect(() => { onBackRef.current = onBack; }, [onBack]);
+
   useEffect(() => {
-    window.history.pushState({ guardado: true }, '');
+    // Empujar un estado inicial para tener algo que interceptar
+    window.history.pushState({ guard: true }, '');
     const handler = () => {
-      window.history.pushState({ guardado: true }, '');
-      onBack();
+      // Re-empujar inmediatamente para mantener el guard activo siempre
+      window.history.pushState({ guard: true }, '');
+      onBackRef.current();
     };
     window.addEventListener('popstate', handler);
     return () => window.removeEventListener('popstate', handler);
-  }, [onBack]);
+  // Sin dependencias: se monta UNA sola vez y nunca se desmonta
+  }, []); // eslint-disable-line
 }
 
 // ── Helpers de Supabase ───────────────────────────────────────────────────────
@@ -188,9 +195,6 @@ function GestionUsuariosView({ setView, usuario }) {
   const [editando, setEditando] = useState(null);
   const [showCambiarPass, setShowCambiarPass] = useState(false);
 
-  const handleBack = useCallback(() => setView('menu'), [setView]);
-  useBackGuard(handleBack);
-
   const cargar = async () => {
     const { data } = await supabase.from('usuarios').select('id, username, role').order('id');
     setUsuarios(data || []);
@@ -346,9 +350,15 @@ function CustomSelect({ value, onChange, options, placeholder = "Seleccione", cl
 function App({ usuario, onLogout }) {
   const [currentView, setCurrentView] = useState('menu');
 
-  // Guard: back button en menú principal = confirmar cierre de sesión
+  // Guard centralizado: vistas de formulario SIEMPRE avisan antes de salir.
+  // Menú principal avisa antes de cerrar sesión.
+  const FORM_VIEWS = ['distribuidor', 'comprar_insumos', 'trabajadores'];
   const handleBack = useCallback(() => {
-    if (currentView !== 'menu') {
+    if (FORM_VIEWS.includes(currentView)) {
+      if (window.confirm('¿Seguro que quieres salir? Perderás los datos no guardados.')) {
+        setCurrentView('menu');
+      }
+    } else if (currentView !== 'menu') {
       setCurrentView('menu');
     } else {
       if (window.confirm('¿Deseas cerrar sesión?')) onLogout();
@@ -635,15 +645,6 @@ function DistribuidorForm({ setView }) {
   const [catalogoPrendas, setCatalogoPrendas] = useState([]);
   const [catalogoTelas, setCatalogoTelas] = useState([]);
 
-  const handleBack = useCallback(() => {
-    if (nombre || quienEntrego || fechaEntrega) {
-      if (window.confirm('¿Tienes datos sin guardar. ¿Seguro que quieres salir?')) setView('menu');
-    } else {
-      setView('menu');
-    }
-  }, [nombre, quienEntrego, fechaEntrega, setView]);
-  useBackGuard(handleBack);
-
   useEffect(() => {
     supabase.from('catalogo_prendas').select('*').then(({ data }) => setCatalogoPrendas(data || []));
     supabase.from('catalogo_maestro').select('*').then(({ data }) => setCatalogoTelas(data || []));
@@ -828,15 +829,6 @@ function ComprarInsumosForm({ setView }) {
   const [guardando, setGuardando] = useState(false);
   const [nuevoCat, setNuevoCat] = useState('');
 
-  const handleBack = useCallback(() => {
-    if (corteId) {
-      if (window.confirm('¿Tienes datos sin guardar. ¿Seguro que quieres salir?')) setView('menu');
-    } else {
-      setView('menu');
-    }
-  }, [corteId, setView]);
-  useBackGuard(handleBack);
-
   useEffect(() => {
     supabase.from('cortes').select('*').then(({ data }) => setCortes(data || []));
     supabase.from('catalogo_maestro').select('*').then(({ data }) => setCatalogo(data || []));
@@ -958,15 +950,6 @@ function RepartirTrabajoForm({ setView }) {
   const [insumosEntregados, setInsumosEntregados] = useState([{ nombre: '', cantidad: '' }]);
   const [guardando, setGuardando] = useState(false);
   const [nuevoCat, setNuevoCat] = useState('');
-
-  const handleBack = useCallback(() => {
-    if (corteId || trabajadorId) {
-      if (window.confirm('¿Tienes datos sin guardar. ¿Seguro que quieres salir?')) setView('menu');
-    } else {
-      setView('menu');
-    }
-  }, [corteId, trabajadorId, setView]);
-  useBackGuard(handleBack);
 
   const agregarPrenda = () => setPrendasAsignadas([...prendasAsignadas, { tipoPrenda: '', telaColor: '', talla: '', cantidad: '', pagoPorPrenda: '' }]);
   const actualizarPrenda = (index, campo, valor) => {
