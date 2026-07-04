@@ -8,16 +8,20 @@ function useBackGuard(onBack) {
   useEffect(() => { onBackRef.current = onBack; }, [onBack]);
 
   useEffect(() => {
-    // Empujar un estado inicial para tener algo que interceptar
-    window.history.pushState({ guard: true }, '');
+    // Doble buffer: empujamos 2 estados para que el primer back
+    // nunca pueda salir de la app (consume el estado extra antes de llegar al nuestro)
+    window.history.pushState({ guard: 'buffer' }, '');
+    window.history.pushState({ guard: 'active' }, '');
+
     const handler = () => {
-      // Re-empujar inmediatamente para mantener el guard activo siempre
-      window.history.pushState({ guard: true }, '');
+      // Re-armamos inmediatamente el doble buffer
+      window.history.pushState({ guard: 'buffer' }, '');
+      window.history.pushState({ guard: 'active' }, '');
       onBackRef.current();
     };
     window.addEventListener('popstate', handler);
     return () => window.removeEventListener('popstate', handler);
-  // Sin dependencias: se monta UNA sola vez y nunca se desmonta
+  // Sin dependencias: se monta UNA sola vez y NUNCA se desmonta ni re-ejecuta
   }, []); // eslint-disable-line
 }
 
@@ -56,7 +60,14 @@ function LoginScreen({ onLogin }) {
       if (dbError || !data) {
         setError('Usuario o contraseña incorrectos.');
       } else {
-        localStorage.setItem('user_session', JSON.stringify({ id: data.id, username: data.username, role: data.role }));
+        // Guardar en sessionStorage con marca de tiempo (expira en 12 horas)
+        const session = {
+          id: data.id,
+          username: data.username,
+          role: data.role,
+          loginTime: Date.now()
+        };
+        sessionStorage.setItem('user_session', JSON.stringify(session));
         onLogin(data);
       }
     } catch {
@@ -1693,12 +1704,27 @@ function FinanzasView({ setView, usuario }) {
 
 function AuthWrapper() {
   const [usuario, setUsuario] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('user_session') || 'null'); } catch { return null; }
+    try {
+      const raw = sessionStorage.getItem('user_session');
+      if (!raw) return null;
+      const session = JSON.parse(raw);
+      // Expirar sesión después de 12 horas de inactividad
+      const EXPIRE_MS = 12 * 60 * 60 * 1000;
+      if (Date.now() - (session.loginTime || 0) > EXPIRE_MS) {
+        sessionStorage.removeItem('user_session');
+        return null;
+      }
+      return session;
+    } catch { return null; }
   });
 
-  const onLogin = (user) => setUsuario(user);
+  const onLogin = (user) => {
+    const session = { ...user, loginTime: Date.now() };
+    sessionStorage.setItem('user_session', JSON.stringify(session));
+    setUsuario(user);
+  };
   const onLogout = () => {
-    localStorage.removeItem('user_session');
+    sessionStorage.removeItem('user_session');
     setUsuario(null);
   };
 
